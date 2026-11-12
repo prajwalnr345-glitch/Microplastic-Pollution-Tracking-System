@@ -1,0 +1,15 @@
+﻿__pycache__/
+*.pyc
+venv/
+.venv/
+.env
+uploads/
+microplastic.db
+users.json
+uploads/
+users.json
+microplastic.db
+*.pyc
+__pycache__/
+venv/
+.env

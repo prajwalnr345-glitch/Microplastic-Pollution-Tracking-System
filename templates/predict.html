@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Predict — Microplastic Pollution Detector</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <style>
+    .metric-row { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin: 15px 0; }
+    .metric-card { background: #f8fafc; border: 1px solid #e2e8f0; padding: 15px; border-radius: 8px; text-align: center; }
+    .metric-card h4 { margin: 0 0 5px 0; font-size: 12px; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; }
+    .metric-card p { margin: 0; font-size: 20px; font-weight: bold; color: #0f172a; }
+    
+    /* 🗺️ OPENSTREETMAP COMPATIBLE PANEL CONFIGURATION */
+    .map-wrapper-box { margin-top: 20px; width: 100%; border: 2px solid #cbd5e1; border-radius: 8px; overflow: hidden; background: #e5e7eb; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
+    .map-header-title { background: #f8fafc; padding: 8px 12px; font-size: 12px; font-weight: bold; color: #475569; border-bottom: 1px solid #e2e8f0; display: flex; justify-content: space-between; }
+    
+    .select-block { margin-bottom: 20px; }
+    .select-block label { font-weight: bold; font-size: 12px; color: #64748b; text-transform: uppercase; display: block; margin-bottom: 8px; }
+    .custom-select { width: 100%; padding: 12px; border-radius: 6px; border: 1px solid #cbd5e1; background-color: #fff; font-size: 14px; font-family: inherit; }
+    .voice-btn { background-color: #0284c7; color: white; border: none; padding: 10px 16px; border-radius: 6px; font-family: inherit; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: 15px; width: 100%; font-weight: 600; transition: background 0.2s; }
+    .voice-btn:hover { background-color: #0369a1; }
+    .fallback-box { background: #f8fafc; border: 2px dashed #cbd5e1; border-radius: 8px; padding: 25px; text-align: center; margin-bottom: 15px; }
+  </style>
+</head>
+<body>
+
+  <div class="app-shell">
+    <div class="topbar">
+      <div class="mark"><span class="mark-dot"></span> POLLUTION DETECTOR</div>
+      <div class="user-area">
+        <span>{{ user.name }}</span>
+        <a href="{{ url_for('logout') }}">Log out</a>
+      </div>
+    </div>
+
+    <div class="predict-main">
+      <div class="eyebrow-block">
+        <h1>Run a prediction</h1>
+        <p>Select your water body tracking node, choose your microscopic sample image, and view your automated metrics mapping data.</p>
+      </div>
+
+      <div class="predict-grid">
+        <div class="panel">
+          <h3>UPLOAD SAMPLE</h3>
+          <form action="/predict" method="POST" enctype="multipart/form-data">
+            
+            <div class="select-block">
+              <label for="location-select">Target Water Body Node</label>
+              <select name="location" id="location-select" class="custom-select">
+                {% for loc in locations %}
+                  <option value="{{ loc }}" {% if selected_location == loc %}selected{% endif %}>{{ loc }}</option>
+                {% endfor %}
+              </select>
+            </div>
+
+            <div class="fallback-box">
+              <label style="font-weight: bold; color: #475569; display: block;">Select Microscopic Image:</label>
+              <input type="file" name="image" accept="image/*" required>
+            </div>
+            
+            {% if image_url %}
+              <h4 style="margin-top:20px;">Analyzed Image Layer Profile:</h4>
+              <img id="preview" src="{{ image_url }}" class="preview-img" alt="Selected sample preview" style="max-width:100%; border-radius:6px; max-height:250px; object-fit:contain; display: block; margin: 10px auto;">
+            {% endif %}
+            
+            <div class="submit-row">
+              <button class="btn" type="submit">Predict pollution level</button>
+            </div>
+          </form>
+        </div>
+
+        <div class="panel">
+          <h3>RESULT</h3>
+          
+          {% if not result %}
+            <div id="result-empty" class="result-empty">
+              No prediction yet — choose a file to compile evaluation parameters.
+            </div>
+          {% else %}
+            <div id="result-content">
+              <div id="result-badge" class="result-badge" style="padding: 10px; border-radius: 6px; text-align: center; margin-bottom: 15px; color: white; font-weight: bold; background-color: {% if result.predicted_class=='High' %}#ef4444{% elif result.predicted_class=='Moderate' %}#f59e0b{% else %}#22c55e{% endif %};">
+                <span>{{ result.predicted_class }} Pollution Level ({{ result.confidence }}%)</span>
+              </div>
+
+              <div class="metric-row">
+                <div class="metric-card">
+                  <h4>Particle Count</h4>
+                  <p>{{ result.particle_count }} items</p>
+                </div>
+                <div class="metric-card">
+                  <h4>Concentration Density</h4>
+                  <p>{{ result.concentration }} p/L</p>
+                </div>
+              </div>
+
+              <div id="prob-list">
+                <h4>Model Output Density Distribution:</h4>
+                {% for cls, val in result.probabilities.items() %}
+                  <div style="margin: 6px 0; font-size:13px; background:#f1f5f9; padding:6px; border-radius:4px;">
+                    <strong>Class Parameter [{{ cls }}]:</strong> {{ val }}%
+                  </div>
+                {% endfor %}
+              </div>
+
+              <button type="button" class="voice-btn" onclick="triggerVoiceAssistant()">
+                🔊 Read Status Report (Voice Assistant)
+              </button>
+            </div>
+          {% endif %}
+
+          <!-- 🗺️ NATIVE OPENSTREETMAP COMPATIBLE PANEL HUB -->
+          <div class="map-wrapper-box">
+            <div class="map-header-title">
+              <span>📍 ACTIVE GEOSPATIAL MAP MONITORING NODE</span>
+              <span id="lbl-coordinates" style="color: #0284c7; font-family: monospace;">13.0359° N, 77.5975° E</span>
+            </div>
+            <!-- Standard OpenStreetMap iframe that cannot be blocked by browser server protocols -->
+            <iframe 
+              id="map-frame"
+              width="100%" 
+              height="350" 
+              frameborder="0" 
+              style="border:0;"
+              src="https://openstreetmap.org">
+            </iframe>
+          </div>
+          
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let globalVoiceText = "";
+
+    {% if result %}
+      const targetLat = {{ result.latitude }};
+      const targetLon = {{ result.longitude }};
+      document.getElementById('lbl-coordinates').innerText = `${targetLat}° N, ${targetLon}° E`;
+      
+      const offset = 0.015;
+      const minLon = targetLon - offset;
+      const minLat = targetLat - offset;
+      const maxLon = targetLon + offset;
+      const maxLat = targetLat + offset;
+      
+      document.getElementById('map-frame').src = `https://openstreetmap.org{minLon}%2C${minLat}%2C${maxLon}%2C${maxLat}&layer=mapnik&marker=${targetLat}%2C${targetLon}`;
+      globalVoiceText = "{{ result.voice_text }}";
+    {% endif %}
+
+    function executeSpeech(text) {
+      if (!text) return;
+      window.speechSynthesis.cancel();
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.rate = 0.95;
+      window.speechSynthesis.speak(utterance);
+    }
+
+    function triggerVoiceAssistant() {
+      executeSpeech(globalVoiceText);
+    }
+
+    {% if result %}
+      window.addEventListener('load', () => {
+          setTimeout(() => { executeSpeech(globalVoiceText); }, 500);
+      });
+    {% endif %}
+  </script>
+</body>
+</html>
